@@ -1,0 +1,4 @@
+Pillow
+exif
+numpy
+imagehash
