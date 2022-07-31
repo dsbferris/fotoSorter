@@ -100,6 +100,7 @@ def move_files_with_their_json(path: str):
             # skip this
             pass
         else:
+
             # TODO Handle files with "...-bearbeitet..."
             raise NotImplementedError
 
