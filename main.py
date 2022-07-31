@@ -103,7 +103,6 @@ def move_files_with_their_json(path: str):
 
             # TODO Handle files with "...-bearbeitet..."
             raise NotImplementedError
-
             if _move_file_with_json(path, f, subdir):
                 pass
 
