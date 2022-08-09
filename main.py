@@ -1,170 +1,101 @@
-# import image_sim_checker as sim
-#
-# folder = r"G:\Alle Fotos\Takeout NO SUBFOLDERS"
-# image_hash_list = sim.generate_hashes_for_images(folder)
-# hashes_dict = sim.cluster_hashes(image_hash_list)
-# sim.print_dups(hashes_dict)
-
-
+import image_exif
+import sorter
 import os
-from pathlib import Path
-import re
+import read_json
+from image_exif import MyImage, create_myimage_for_image
 
-fotos_path = '/Users/ferris/Downloads/takeout_all'
-
-
-def rreplace(s: str, old: str, new: str, occurrence: int):
-    li = s.rsplit(old, occurrence)
-    return new.join(li)
+_path = '/Users/ferris/Downloads/takeout_all/'
 
 
-def get_file_extension(file: str):
-    """
-    Get file extension for a file. Includes the dot.
-    :param file: File to get the extension for
-    :return: Extension with dot. (e.g. ".jpg")
-    """
-    return Path(file).suffix
-
-
-def get_all_file_extensions_in_folder(path: str):
-    files = os.listdir(path)
-    extensions = set()
-    for f in files:
-        suffix = get_file_extension(f.lower())
-        extensions.add(suffix)
-    for e in extensions:
-        print(e)
-    return list(extensions)
-
-
-# _extensions = get_all_file_extensions_in_folder(_path)
-# supported_extensions = ["jpg", "jpeg", "png", "heic"]
-unsupported_extensions = [".html", ".json"]
-
-
-def get_json_for_file(file: str, path: str) -> str | None:
-    """
-    Returns filename for corresponding json-file to given file
-    :param file: File to find a json-file for.
-    :param path: Path or pseudo-working directory in which to check if a json-file exists.
-    :return: None if no json-file can be found. If not None, its guaranteed to be a valid file inside path.
-    """
-    json_file: str
-    if '(' in file:
-        first_open_brace_index = file.index('(')
-        first_close_brace_index = file.index(')')
-        braces_text = file[first_open_brace_index:first_close_brace_index + 1]
-        file_edit = file.replace(braces_text, "", 1)
-        json_file = file_edit + braces_text + ".json"
-
-        json_file_path = os.path.join(path, json_file)
-        if Path(json_file_path).exists():
-            return json_file
-
-    # maybe file contains braces but doesn't follow that one specific naming scheme
-    json_file = file + ".json"
-
-    json_file_path = os.path.join(path, json_file)
-    if Path(json_file_path).exists():
-        return json_file
-
-    # let's try another naming method
-    ext = get_file_extension(file)
-    json_file = file.replace(ext, "") + ".json"  # Include dot in json, because ext contains the dot
-
-    json_file_path = os.path.join(path, json_file)
-    if Path(json_file_path).exists():
-        return json_file
-
-    # ok, one more naming method
-    try:
-        filename, extension = file.rsplit(".", 1)
-    except:
-        return None
-
-    regex_result = re.findall('_\d$', filename)
-    if len(regex_result) > 0:
-        json_file = rreplace(filename, regex_result[0], "", 1)
-        json_file += "." + extension + regex_result[0] + ".json"
-        json_file_path = os.path.join(path, json_file)
-        if Path(json_file_path).exists():
-            return json_file
-
-    return None
-
-
-def _move_file_with_json(path: str, f: str, new_path: str) -> bool:
-    """
-    Moves file with it's metadata-json file into given subdirectory. Might raise Exceptions on file move.
-    :param path: Path where file f and its json is located
-    :param f: File to movie with its json
-    :param new_path: New path. Files will be moved there.
-    :return: True if file with its json were moved. False if file got no corresponding json.
-    """
+def mv_image_with_json(path, f, json_file, new_path):
     full_f_path = os.path.join(path, f)
+    json_file_path = os.path.join(path, json_file)
 
-    json_for_f = get_json_for_file(f, path)
-    if json_for_f is not None:
-        full_json_path = os.path.join(path, json_for_f)
-        new_f_path = os.path.join(new_path, f)
-        new_json_path = os.path.join(new_path, json_for_f)
-        os.rename(full_f_path, new_f_path)
-        os.rename(full_json_path, new_json_path)
-        return True
-    else:
-        return False
+    new_f_path = os.path.join(new_path, f)
+    new_json_path = os.path.join(new_path, json_file)
+
+    os.rename(full_f_path, new_f_path)
+    os.rename(json_file_path, new_json_path)
 
 
-def create_subdir(subdir: str):
-    subdir_path = Path(subdir)
-    if not subdir_path.exists():
-        subdir_path.mkdir()
+def move_those_with_json_timestamp(path: str):
+    _with_timestamp = "!AAA_with_time"
+    path_with_timestamp = os.path.join(path, _with_timestamp)
+    # sorter._create_subdir(path_with_timestamp)
 
+    _with_timestamp_and_geo = "!AAA_with_time_and_geo"
+    path_with_timestamp_and_geo = os.path.join(path, _with_timestamp_and_geo)
+    # sorter._create_subdir(path_with_timestamp_and_geo)
 
-def _move_out_bearbeitet_files(path: str, new_path: str):
-    bearbeitet = "-bearbeitet"
     files = os.listdir(path)
+    images: list[MyImage] = []
+    ignores = [_with_timestamp, _with_timestamp_and_geo, ".DS_Store"]
     for f in files:
-        if bearbeitet in f:
-            clean_filename = f.replace(bearbeitet, "")
-            if _move_file_with_json(path, clean_filename, new_path):
-                full_f_path = os.path.join(path, f)
-                new_f_path = os.path.join(new_path, f)
-                os.rename(full_f_path, new_f_path)
-            else:
-                print("Error with bearbeitet file: %s" % f)
-
-
-def _merge_bearbeitet_files(path: str, new_path: str):
-    bearbeitet = "-bearbeitet"
-    files = os.listdir(path)
-    for f in files:
-        if bearbeitet in f:
-            clean_filename = f.replace(bearbeitet, "")
-            json = get_json_for_file(f, path)
-            full_f_path = os.path.join(path, f)
-            new_path = os.path.join(new_path, clean_filename)
-
-
-def move_files_with_their_json(path: str):
-    sorted_subdir = os.path.join(path, "sorted")
-    create_subdir(sorted_subdir)
-    # bearbeitet_subdir = os.path.join(path, "!AAA_bearbeitet")
-    # create_subdir(bearbeitet_subdir)
-
-    # _move_out_bearbeitet_files(path, bearbeitet_subdir)
-    files = os.listdir(path)
-    for f in files:
-        if f == ".DS_Store":
+        if f in ignores:
             continue
-        ext = get_file_extension(f)
-        if ext in unsupported_extensions:
-            # skip this
-            pass
+        if f.endswith(".json"):
+            continue
+
+        full_f_path = os.path.join(path, f)
+        json_file = sorter.get_json_for_file(file=f, path=path)
+        if json_file is None:
+            print("No json for %s" % f)
         else:
-            if _move_file_with_json(path, f, sorted_subdir):
-                pass
+            json_file_path = os.path.join(path, json_file)
+            img = create_myimage_for_image(full_f_path, json_file_path)
+            image_exif.set_exif_for_img(img)
+            # images.append(img)
+            if img.timestamp is not None and img.timestamp != 0:
+                if img.longitude is not None and img.longitude != 0:
+                    pass
+                    # move_image_with_json(path, f, json_file, path_with_timestamp_and_geo)
+                else:
+                    pass
+                    # move_image_with_json(path, f, json_file, path_with_timestamp)
 
 
-move_files_with_their_json(fotos_path)
+def move_those_with_exif_timestamp(path: str):
+    _with_timestamp = "0a0_with_exif_time"
+    path_with_timestamp = os.path.join(path, _with_timestamp)
+    sorter._create_subdir(path_with_timestamp)
+
+    _without_timestamp = "0a0_without_exif_time"
+    path_without_timestamp = os.path.join(path, _without_timestamp)
+    sorter._create_subdir(path_without_timestamp)
+
+    _cannot_handle = "0a0_cannot_handle"
+    path_cannot_handle = os.path.join(path, _cannot_handle)
+    sorter._create_subdir(path_cannot_handle)
+
+    files = os.listdir(path)
+    # images: list[MyImage] = []
+    ignores = [_with_timestamp, _without_timestamp, ".DS_Store"]
+    for f in files:
+        if f in ignores:
+            continue
+        if f.endswith(".json"):
+            continue
+
+        full_f_path = os.path.join(path, f)
+        json_file = sorter.get_json_for_file(file=f, path=path)
+        if json_file is None:
+            print("No json for %s" % f)
+        else:
+            json_file_path = os.path.join(path, json_file)
+            try:
+                dates = image_exif.get_datetime_from_img(full_f_path)
+                if dates[0] is None and dates[1] is None and dates[2] is None:
+                    mv_image_with_json(path, f, json_file, path_without_timestamp)
+                else:
+                    # mv_image_with_json(path, f, json_file, path_with_timestamp)
+                    pass
+                    # TODO CHECK EXIF AND JSON TIMESTAMP MATCH!
+
+            except:
+                mv_image_with_json(path, f, json_file, path_cannot_handle)
+                # print("Cannot handle file %s" % f)
+
+
+if __name__ == "__main__":
+    print("HELLO!")
+    move_those_with_exif_timestamp(path=_path)
