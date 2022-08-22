@@ -2,7 +2,7 @@ import image_exif
 import sorter
 import os
 import read_json
-from image_exif import MyImage, create_myimage_for_image
+from image_exif import MyImageClass, old_create_myimage_for_image
 
 _path = '/Users/ferris/Downloads/takeout_all/'
 
@@ -28,7 +28,7 @@ def move_those_with_json_timestamp(path: str):
     # sorter._create_subdir(path_with_timestamp_and_geo)
 
     files = os.listdir(path)
-    images: list[MyImage] = []
+    images: list[MyImageClass] = []
     ignores = [_with_timestamp, _with_timestamp_and_geo, ".DS_Store"]
     for f in files:
         if f in ignores:
@@ -42,11 +42,11 @@ def move_those_with_json_timestamp(path: str):
             print("No json for %s" % f)
         else:
             json_file_path = os.path.join(path, json_file)
-            img = create_myimage_for_image(full_f_path, json_file_path)
+            img = old_create_myimage_for_image(full_f_path, json_file_path)
             image_exif.set_exif_for_img(img)
             # images.append(img)
-            if img.timestamp is not None and img.timestamp != 0:
-                if img.longitude is not None and img.longitude != 0:
+            if img.json_timestamp is not None and img.json_timestamp != 0:
+                if img.json_longitude is not None and img.json_longitude != 0:
                     pass
                     # move_image_with_json(path, f, json_file, path_with_timestamp_and_geo)
                 else:
