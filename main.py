@@ -1,8 +1,8 @@
-import image_exif
+import MyImageClass
 import sorter
 import os
 import read_json
-from image_exif import MyImageClass, old_create_myimage_for_image
+from MyImageClass import MyImageClass, old_create_myimage_for_image
 
 _path = '/Users/ferris/Downloads/takeout_all/'
 
@@ -83,7 +83,7 @@ def move_those_with_exif_timestamp(path: str):
         else:
             json_file_path = os.path.join(path, json_file)
             try:
-                dates = image_exif.get_datetime_from_img(full_f_path)
+                dates = MyImageClass.get_datetime_from_img(full_f_path)
                 if dates[0] is None and dates[1] is None and dates[2] is None:
                     mv_image_with_json(path, f, json_file, path_without_timestamp)
                 else:
