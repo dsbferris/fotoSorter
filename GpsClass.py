@@ -79,67 +79,72 @@ class GpsClass:
 
     """
 
-    def __init__(self, gps: dict):
+    def __init__(self, gps):
         """
         Creates instance of GpsClass by given input
-        :param gps: Either Google Takeout JSON 'geoData' dict or piexif 'GPS' dict.
+        :param gps: Either Google Takeout JSON 'geoData' dict or piexif 'GPS' dict or simple tuple (lat, lon, alt).
         """
-        # Minimal info needed for GPS data
-        json_keys = ['latitude', 'longitude', 'altitude']
-        exif_keys = [1, 2, 3, 4, 5, 6]
-        isJsonFormat = True
-        isExifFormat = True
-        for key in json_keys:
-            if key not in gps.keys():
-                isJsonFormat = False
+        if isinstance(gps, tuple.__class__):
+            pass
+        elif isinstance(gps, dict.__class__):
+            # Minimal info needed for GPS data
+            json_keys = ['latitude', 'longitude', 'altitude']
+            exif_keys = [1, 2, 3, 4, 5, 6]
+            is_json_format = True
+            is_exif_format = True
+            for key in json_keys:
+                if key not in gps.keys():
+                    is_json_format = False
 
-        for key in exif_keys:
-            if key not in gps.keys():
-                isExifFormat = False
+            for key in exif_keys:
+                if key not in gps.keys():
+                    is_exif_format = False
 
-        if isJsonFormat and not isExifFormat:
-            self.lat = float(gps["latitude"])
-            self.lon = float(gps["longitude"])
-            self.alt = float(gps["altitude"])
-            return
-        elif not isJsonFormat and isExifFormat:
-            lat_ref = gps[piexif.GPSIFD.GPSLatitudeRef]
-            lat = gps[piexif.GPSIFD.GPSLatitude]
+            if is_json_format and not is_exif_format:
+                self.lat = float(gps["latitude"])
+                self.lon = float(gps["longitude"])
+                self.alt = float(gps["altitude"])
+                return
+            elif not is_json_format and is_exif_format:
+                lat_ref = gps[piexif.GPSIFD.GPSLatitudeRef]
+                lat = gps[piexif.GPSIFD.GPSLatitude]
 
-            lon_ref = gps[piexif.GPSIFD.GPSLongitudeRef]
-            lon = gps[piexif.GPSIFD.GPSLongitude]
+                lon_ref = gps[piexif.GPSIFD.GPSLongitudeRef]
+                lon = gps[piexif.GPSIFD.GPSLongitude]
 
-            alt_ref = gps[piexif.GPSIFD.GPSAltitudeRef]
-            alt = gps[piexif.GPSIFD.GPSAltitude]
+                alt_ref = gps[piexif.GPSIFD.GPSAltitudeRef]
+                alt = gps[piexif.GPSIFD.GPSAltitude]
 
-            self.lat = GpsClass.rela3_to_dd(lat)
-            if lat_ref == b"N":
-                pass
-            elif lat_ref == b"S":
-                self.lat = self.lat * -1
+                self.lat = GpsClass.rela3_to_dd(lat)
+                if lat_ref == b"N":
+                    pass
+                elif lat_ref == b"S":
+                    self.lat = self.lat * -1
+                else:
+                    raise ValueError("It's either N or S. You have %s" % lat_ref)
+
+                self.lon = GpsClass.rela3_to_dd(lon)
+                if lon_ref == b"E":
+                    pass
+                elif lon_ref == b"W":
+                    self.lon = self.lon * -1
+                else:
+                    raise ValueError("It's either E or W. You have %s" % lon_ref)
+
+                self.alt = GpsClass.rela_to_dd(alt)
+                if alt_ref == 0:
+                    pass
+                elif alt_ref == 1:
+                    self.alt = self.alt * -1
+                else:
+                    raise ValueError("It's either above or below sea level. You have %s" % alt_ref)
+
+            elif is_json_format and is_exif_format:
+                raise ValueError("Is your given dict empty?! Why tho...\ndict len: %d" % len(gps))
             else:
-                raise ValueError("It's either N or S. You have %s" % lat_ref)
-
-            self.lon = GpsClass.rela3_to_dd(lon)
-            if lon_ref == b"E":
-                pass
-            elif lon_ref == b"W":
-                self.lon = self.lon * -1
-            else:
-                raise ValueError("It's either E or W. You have %s" % lon_ref)
-
-            self.alt = GpsClass.rela_to_dd(alt)
-            if alt_ref == 0:
-                pass
-            elif alt_ref == 1:
-                self.alt = self.alt * -1
-            else:
-                raise ValueError("It's either above or below sea level. You have %s" % alt_ref)
-
-        elif isJsonFormat and isExifFormat:
-            raise ValueError("Is your given dict empty?! Why tho...\ndict len: %d" % len(gps))
+                raise ValueError("Given dict does not contain all needed info. Is it even in right format?\n%s" % gps)
         else:
-            raise ValueError("Given dict does not contain all needed info. Is it even in right format?\n%s" % gps)
+            raise ValueError("Unknown type for GPS. Please read documentation!")
 
     @staticmethod
     def rela3_to_dd(coords: tuple) -> float:

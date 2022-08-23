@@ -1,8 +1,7 @@
 import MyImageClass
 import sorter
 import os
-import read_json
-from MyImageClass import MyImageClass, old_create_myimage_for_image
+from MyImageClass import MyImageClass
 
 _path = '/Users/ferris/Downloads/takeout_all/'
 

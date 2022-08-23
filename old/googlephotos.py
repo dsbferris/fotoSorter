@@ -2,7 +2,7 @@ import os
 import pathlib
 import shutil
 
-import read_json
+from old import read_json
 
 g_dir = r"G:\Alle Fotos\Takeout NO SUBFOLDERS"
 g_new = r"G:\Alle Fotos\Takeout NEW"
