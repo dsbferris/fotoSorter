@@ -58,7 +58,7 @@ def get_json_for_file(file: str, path: str) -> str | None:
         return json_file
 
     # let's try another naming method
-    ext = get_file_extension(file)
+    ext = Path(file).suffix
     json_file = file.replace(ext, "") + ".json"  # Include dot in json, because ext contains the dot
 
     json_file_path = os.path.join(path, json_file)
