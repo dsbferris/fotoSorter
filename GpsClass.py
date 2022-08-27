@@ -1,6 +1,6 @@
 import math
 
-import piexif
+from piexif import GPSIFD
 
 
 # Highly recommend checking this:
@@ -11,9 +11,9 @@ import piexif
 
 
 class GpsClass:
-    lat: float
-    lon: float
-    alt: float
+    lat: float = 0.0
+    lon: float = 0.0
+    alt: float = 0.0
 
     """
     
@@ -84,38 +84,39 @@ class GpsClass:
         Creates instance of GpsClass by given input
         :param gps: Either Google Takeout JSON 'geoData' dict or piexif 'GPS' dict or simple tuple (lat, lon, alt).
         """
-        if isinstance(gps, tuple.__class__):
-            pass
-        elif isinstance(gps, dict.__class__):
-            # Minimal info needed for GPS data
-            json_keys = ['latitude', 'longitude', 'altitude']
-            exif_keys = [1, 2, 3, 4, 5, 6]
-            is_json_format = True
-            is_exif_format = True
-            for key in json_keys:
-                if key not in gps.keys():
-                    is_json_format = False
-
-            for key in exif_keys:
-                if key not in gps.keys():
-                    is_exif_format = False
-
-            if is_json_format and not is_exif_format:
-                self.lat = float(gps["latitude"])
-                self.lon = float(gps["longitude"])
-                self.alt = float(gps["altitude"])
+        if isinstance(gps, tuple):
+            if len(gps) == 3:
+                # Mainly used for debugging
+                self.lat = gps[0]
+                self.lon = gps[1]
+                self.alt = gps[2]
+            else:
+                raise ValueError("Unknown tuple format for gps. Please use (lat, lon, alt).")
+        elif isinstance(gps, dict):
+            if len(gps) == 0:
+                # Some images contain GPS section in exif, but it's emtpy...
                 return
-            elif not is_json_format and is_exif_format:
-                lat_ref = gps[piexif.GPSIFD.GPSLatitudeRef]
-                lat = gps[piexif.GPSIFD.GPSLatitude]
+            if len(gps) == 1:
+                # Some images only contain gps version
+                if GPSIFD.GPSVersionID in gps.keys():
+                    return
 
-                lon_ref = gps[piexif.GPSIFD.GPSLongitudeRef]
-                lon = gps[piexif.GPSIFD.GPSLongitude]
+            keys = gps.keys()
+            json_keys = ['latitude', 'longitude', 'altitude']
+            if set(json_keys) <= keys:
+                self.lat = float(gps[json_keys[0]])
+                self.lon = float(gps[json_keys[1]])
+                self.alt = float(gps[json_keys[2]])
+                return
 
-                alt_ref = gps[piexif.GPSIFD.GPSAltitudeRef]
-                alt = gps[piexif.GPSIFD.GPSAltitude]
-
-                self.lat = GpsClass.rela3_to_dd(lat)
+            has_exif_keys = False
+            # some exif dicts contain only lat and lon, not alt
+            exif_lat_lon_keys = [GPSIFD.GPSLatitudeRef, GPSIFD.GPSLatitude, GPSIFD.GPSLongitudeRef, GPSIFD.GPSLongitude]
+            if set(exif_lat_lon_keys) <= keys:
+                has_exif_keys = True
+                lat_ref = gps[GPSIFD.GPSLatitudeRef]
+                lat = gps[GPSIFD.GPSLatitude]
+                self.lat = GpsClass._rela3_to_dd(lat)
                 if lat_ref == b"N":
                     pass
                 elif lat_ref == b"S":
@@ -123,7 +124,9 @@ class GpsClass:
                 else:
                     raise ValueError("It's either N or S. You have %s" % lat_ref)
 
-                self.lon = GpsClass.rela3_to_dd(lon)
+                lon_ref = gps[GPSIFD.GPSLongitudeRef]
+                lon = gps[GPSIFD.GPSLongitude]
+                self.lon = GpsClass._rela3_to_dd(lon)
                 if lon_ref == b"E":
                     pass
                 elif lon_ref == b"W":
@@ -131,7 +134,11 @@ class GpsClass:
                 else:
                     raise ValueError("It's either E or W. You have %s" % lon_ref)
 
-                self.alt = GpsClass.rela_to_dd(alt)
+            exif_alt_keys = [GPSIFD.GPSAltitudeRef, GPSIFD.GPSAltitude]
+            if set(exif_alt_keys) <= set(gps):
+                alt_ref = gps[GPSIFD.GPSAltitudeRef]
+                alt = gps[GPSIFD.GPSAltitude]
+                self.alt = GpsClass._rela_to_dd(alt)
                 if alt_ref == 0:
                     pass
                 elif alt_ref == 1:
@@ -139,15 +146,13 @@ class GpsClass:
                 else:
                     raise ValueError("It's either above or below sea level. You have %s" % alt_ref)
 
-            elif is_json_format and is_exif_format:
-                raise ValueError("Is your given dict empty?! Why tho...\ndict len: %d" % len(gps))
-            else:
-                raise ValueError("Given dict does not contain all needed info. Is it even in right format?\n%s" % gps)
+            if not has_exif_keys:
+                raise ValueError("No JSON Keys nor EXIF Keys found. Please check...\n%s" % gps)
         else:
             raise ValueError("Unknown type for GPS. Please read documentation!")
 
     @staticmethod
-    def rela3_to_dd(coords: tuple) -> float:
+    def _rela3_to_dd(coords: tuple) -> float:
         if len(coords) != 3:
             raise ValueError("Expected 3 values inside tuple.\nGot %d values.\n%s" % (len(coords), coords))
         # degree_numerator: float = coords[0][0]
@@ -159,21 +164,21 @@ class GpsClass:
         # degrees: float = degree_numerator / degree_denominator
         # minutes: float = minutes_numerator / minutes_denominator
         # seconds: float = seconds_numerator / seconds_denominator
-        degrees = GpsClass.rela_to_dd(coords[0])
-        minutes = GpsClass.rela_to_dd(coords[1])
-        seconds = GpsClass.rela_to_dd(coords[2])
+        degrees = GpsClass._rela_to_dd(coords[0])
+        minutes = GpsClass._rela_to_dd(coords[1])
+        seconds = GpsClass._rela_to_dd(coords[2])
         dd = degrees + minutes / 60 + seconds / 3600
         return dd
 
     @staticmethod
-    def rela_to_dd(tup: tuple) -> float:
+    def _rela_to_dd(tup: tuple) -> float:
         if len(tup) != 2:
             raise ValueError("Expected 2 values (numerator, denominator) inside the tuple."
                              "\nLen: %d\nTup: %s" % (len(tup), tup))
         return tup[0] / tup[1]
 
     @staticmethod
-    def dd_to_rela(dd: float) -> tuple:
+    def _dd_to_rela(dd: float) -> tuple:
         if dd < 0:
             dd *= -1
         denominator = 1
@@ -184,7 +189,7 @@ class GpsClass:
         return int(dd), int(denominator)
 
     @staticmethod
-    def dd_to_rela3(dd: float) -> tuple:
+    def _dd_to_rela3(dd: float) -> tuple:
         if dd < 0:
             dd *= -1
 
@@ -195,7 +200,7 @@ class GpsClass:
         dd -= minutes[0]
         dd *= 60
         dd = round(dd, 3)
-        seconds = GpsClass.dd_to_rela(dd)
+        seconds = GpsClass._dd_to_rela(dd)
         return degree, minutes, seconds
 
     def __eq__(self, other):
@@ -231,10 +236,19 @@ class GpsClass:
             # Some version. Don't know differences between versions, but 2000 seems legit.
             piexif.GPSIFD.GPSVersionID: (2, 0, 0, 0),
             piexif.GPSIFD.GPSLatitudeRef: lat_ref,
-            piexif.GPSIFD.GPSLatitude: GpsClass.dd_to_rela3(self.lat),
+            piexif.GPSIFD.GPSLatitude: GpsClass._dd_to_rela3(self.lat),
             piexif.GPSIFD.GPSLongitudeRef: lon_ref,
-            piexif.GPSIFD.GPSLongitude: GpsClass.dd_to_rela3(self.lon),
+            piexif.GPSIFD.GPSLongitude: GpsClass._dd_to_rela3(self.lon),
             piexif.GPSIFD.GPSAltitudeRef: alt_ref,
-            piexif.GPSIFD.GPSAltitude: GpsClass.dd_to_rela(self.alt),
+            piexif.GPSIFD.GPSAltitude: GpsClass._dd_to_rela(self.alt),
         }
         return gps_dict
+
+    def is_zero(self):
+        if self.lat == 0.0 and self.lon == 0.0 and self.alt == 0.0:
+            return True
+        else:
+            return False
+
+    def __repr__(self):
+        return str(self.to_dd())

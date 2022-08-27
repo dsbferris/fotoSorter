@@ -16,22 +16,22 @@ class TestGpsClass(TestCase):
         sample_dd_lon = 10.8595210
         sample_dd_alt = 191.248
 
-        self.assertAlmostEqual(GpsClass.rela3_to_dd(sample_lat), sample_dd_lat, 6)
-        self.assertAlmostEqual(GpsClass.rela3_to_dd(sample_lon), sample_dd_lon, 6)
-        self.assertAlmostEqual(GpsClass.rela_to_dd(sample_alt), sample_dd_alt, 6)
+        self.assertAlmostEqual(GpsClass._rela3_to_dd(sample_lat), sample_dd_lat, 6)
+        self.assertAlmostEqual(GpsClass._rela3_to_dd(sample_lon), sample_dd_lon, 6)
+        self.assertAlmostEqual(GpsClass._rela_to_dd(sample_alt), sample_dd_alt, 6)
 
-        rela3 = GpsClass.dd_to_rela3(sample_dd_lat)
+        rela3 = GpsClass._dd_to_rela3(sample_dd_lat)
         self.assertEqual(rela3[0], sample_lat[0])
         self.assertEqual(rela3[1], sample_lat[1])
         seconds_denominator_factor_diff = rela3[2][1] / sample_lat[2][1]
         self.assertAlmostEqual(rela3[2][0], sample_lat[2][0] * seconds_denominator_factor_diff, delta=1)
 
-        rela3 = GpsClass.dd_to_rela3(sample_dd_lon)
+        rela3 = GpsClass._dd_to_rela3(sample_dd_lon)
         self.assertEqual(rela3[0], sample_lon[0])
         self.assertEqual(rela3[1], sample_lon[1])
         self.assertAlmostEqual(rela3[2][0] / rela3[2][1], sample_lon[2][0] / sample_lon[2][1], delta=1)
 
-        rela = GpsClass.dd_to_rela(sample_dd_alt)
+        rela = GpsClass._dd_to_rela(sample_dd_alt)
         self.assertEqual(rela[0] * rela[1], sample_alt[0] * sample_alt[1])
 
     def test_init_and_equal(self):
