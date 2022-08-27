@@ -1,3 +1,4 @@
+from pathlib import Path
 import piexif
 import os
 from datetime import datetime
@@ -5,6 +6,7 @@ import json
 from GpsClass import GpsClass
 from subprocess import call
 import platform
+import re
 
 
 class GoogleTakeoutImage:
@@ -12,7 +14,8 @@ class GoogleTakeoutImage:
     Contains json and exif info about an Image.
     Supports reading and writing exif to an Image.
     """
-    filepath: str
+    filepath: Path
+    json_filepath: Path
     # json_filepath: str
 
     # Recommended to use PhotoTakenTime
@@ -26,34 +29,88 @@ class GoogleTakeoutImage:
     json_gps: GpsClass = None
     exif_gps: GpsClass = None
 
-    def __init__(self, filepath: str, json_filepath: str, exif_dict: dict | None = None):
+    def __init__(self, filepath: Path, exif_dict: dict | None = None):
         """
         Initialized a new Instance. filepath and json_filepath must be provided.
         exif_dict can be passed, if you already have it on hands, for example while debugging and testing.
         So you don't have to read a file over and over again.
         Reads all data from File/Image and json. No need to call a load method.
+        It may throw a NoJsonFileException or a NoExifException. You may want to catch these.
 
         :param filepath: Filepath to a File. This may be a file of any format,
         as you can manipulate creation, modified, access datetime for every file.
-        :param json_filepath: Your initially pass file in filepath need to have a corresponding json file.
         :param exif_dict: If you already got it, pass it.
         """
         self.filepath = filepath
-        if json_filepath is None or json_filepath == "":
-            raise ValueError("No json path provided")
-        # self.json_filepath = json_filepath
+
+        self.json_filepath = self._get_json_for_file()
+
         try:
-            self._read_data_from_json(json_filepath)
+            self._read_data_from_json()
         except Exception as e:
-            raise ValueError("Could not read/process json file.\n%s" % e)
+            raise JsonParsingException("Could not read/process json file.\n%s" % e)
 
-        self._read_data_from_exif(self._save_load_exif())
+        self._read_data_from_exif(exif_dict)
+        pass
 
-    def _read_data_from_json(self, json_filepath):
+    def _get_json_for_file(self) -> Path:
+        """
+        Returns filepath for corresponding json-file to given file
+        :return: Returns a valid path to the existing json file or throws a NoJsonFileException.
+        """
+        filename = self.filepath.name
+        path = self.filepath.parent
+
+        # IMG_1234(1).jpg with IMG_1234.jpg(1).json
+        if '(' in filename:
+            first_open_brace_index = filename.index('(')
+            first_close_brace_index = filename.index(')')
+            braces_text = filename[first_open_brace_index:first_close_brace_index + 1]
+            filename_without_braces_and_number = filename.replace(braces_text, "", 1)
+            json_filename_with_shifted_braces_and_number = filename_without_braces_and_number + braces_text + ".json"
+
+            json_filepath = path.joinpath(json_filename_with_shifted_braces_and_number)
+            if json_filepath.exists():
+                return json_filepath
+
+        # IMG_1234.jpg with IMG_1234.jpg.json
+        json_filename_just_appendix = filename + ".json"
+        json_filepath = path.joinpath(json_filename_just_appendix)
+        if json_filepath.exists():
+            return json_filepath
+
+        # IMG_1234.jpg with IMG_1234.json
+        ext = self.filepath.suffix
+        json_filename_just_replace_ext = filename.replace(ext, "") + ".json"
+
+        json_filepath = path.joinpath(json_filename_just_replace_ext)
+        if json_filepath.exists():
+            return json_filepath
+
+        # IMG_1234_1.jpg with IMG_1234.jpg_1.json
+        try:
+            filename, extension = filename.rsplit(".", 1)
+            regex_result = re.findall(r'_\d$', filename)
+            if len(regex_result) > 0:
+                json_filename_underscore_numeration = self._rreplace(filename, regex_result[0], "", 1)
+                json_filename_underscore_numeration += "." + extension + regex_result[0] + ".json"
+                json_filepath = path.joinpath(json_filename_underscore_numeration)
+                if json_filepath.exists():
+                    return json_filepath
+        except:
+            pass
+        raise NoJsonFileException("Could not find a valid JSON file for this file.\n%s" % self.filepath)
+
+    @staticmethod
+    def _rreplace(s: str, old: str, new: str, occurrence: int):
+        li = s.rsplit(old, occurrence)
+        return new.join(li)
+
+    def _read_data_from_json(self):
         """
         Reads all available Info from json, like timestamps and GPS.
         """
-        with open(json_filepath, "r") as json_file:
+        with open(self.json_filepath, "r") as json_file:
             json_dict = json.load(json_file)
         if "photoTakenTime" in json_dict.keys():
             photo_taken_time = json_dict["photoTakenTime"]
@@ -73,9 +130,9 @@ class GoogleTakeoutImage:
 
     def _save_load_exif(self) -> dict:
         try:
-            return piexif.load(self.filepath)
-        except Exception as e:
-            raise ValueError("Unable to load exif from file")
+            return piexif.load(str(self.filepath))
+        except:
+            raise NoExifException("Unable to load exif from file.\n%s" % self.filepath)
 
     def _read_data_from_exif(self, exif_dict: dict | None = None):
         """
@@ -83,7 +140,6 @@ class GoogleTakeoutImage:
         :param exif_dict: exif_dict retrieved vom piexif.load()
         :return: No return. Will write values to self.
         """
-        # TODO COMMENT!
         if exif_dict is None:
             exif_dict = self._save_load_exif()
         keys = exif_dict.keys()
@@ -92,22 +148,27 @@ class GoogleTakeoutImage:
             if piexif.ImageIFD.DateTime in zeroth.keys():
                 zeroth_dt = zeroth[piexif.ImageIFD.DateTime]
                 self.exif_zeroth_timestamp = GoogleTakeoutImage._datetime_from_exif_str(str(zeroth_dt))
+                del zeroth_dt
+            del zeroth
         if "1st" in keys:
             first = exif_dict["1st"]
             if piexif.ImageIFD.DateTime in first.keys():
                 # Most programms will only read/write to the first/0th EXIF data block,
                 # but some may read/write from second/1st.
                 raise NotImplementedError("THERE MIGHT BE ANOTHER DATETIME HERE!\n%s\n" % self.filepath)
+            del first
 
         if "Exif" in keys:
             exif = exif_dict["Exif"]
             if piexif.ExifIFD.DateTimeOriginal in exif:
                 original = exif[piexif.ExifIFD.DateTimeOriginal]
                 self.exif_original_timestamp = GoogleTakeoutImage._datetime_from_exif_str(str(original))
+                del original
             if piexif.ExifIFD.DateTimeDigitized in exif:
                 digitized = exif[piexif.ExifIFD.DateTimeDigitized]
                 self.exif_digitized_timestamp = GoogleTakeoutImage._datetime_from_exif_str(str(digitized))
-
+                del digitized
+            del exif
         # TODO TEST!
         if "GPS" in keys:
             self.exif_gps = GpsClass(exif_dict["GPS"])
@@ -175,8 +236,7 @@ class GoogleTakeoutImage:
         if platform.platform().lower().startswith("macos"):
             if new_timestamp is None:
                 new_timestamp = self.json_photoTakenTime
-            # TODO TEST!
-            command = 'SetFile -d "%s" %s' % (new_timestamp.strftime('%m/%d/%Y %H:%M:%S'), self.filepath)
+            command = 'SetFile -d "%s" "%s"' % (new_timestamp.strftime('%m/%d/%Y %H:%M:%S'), self.filepath)
             call(command, shell=True)
         else:
             raise TypeError("Your OS is not supported for this operation! "
@@ -222,10 +282,16 @@ class GoogleTakeoutImage:
             or self.exif_digitized_timestamp
 
     def _has_json_gps(self):
-        return self.json_gps is not None
+        if self.json_gps is not None:
+            if not self.json_gps.is_zero():
+                return True
+        return False
 
     def _has_exif_gps(self):
-        return self.exif_gps is not None
+        if self.exif_gps is not None:
+            if not self.exif_gps.is_zero():
+                return True
+        return False
 
     def adjust_file(self, force_json: bool = False, exif_dict: dict | None = None):
         # TODO COMMENT!
@@ -324,10 +390,43 @@ class GoogleTakeoutImage:
                 # Sad. No info about gps
                 self.dry_run_gps_operation = 4
 
-    @staticmethod
-    def list_path(path: str):
-        # TODO RIP FROM sorter
-        pass
+    def move_file_and_its_json(self, new_path: str):
+        # TODO COMMENT
+        new_path_path = Path(new_path)
+
+        filepath_path = Path(self.filepath)
+        json_filepath_path = Path(self.json_filepath)
+
+        new_filepath = new_path_path.joinpath(filepath_path.name)
+        new_json_filepath = new_path_path.joinpath(json_filepath_path.name)
+
+        os.rename(filepath_path, new_filepath)
+        os.rename(json_filepath_path, new_json_filepath)
+
+
+class JsonParsingException(Exception):
+    def __init__(self, message):
+        self.message = message
+
+    def __str__(self):
+        return self.message
+
+
+class NoJsonFileException(Exception):
+    def __init__(self, message):
+        self.message = message
+
+    def __str__(self):
+        return self.message
+
+
+class NoExifException(Exception):
+        def __init__(self, message):
+            self.message = message
+
+        def __str__(self):
+            return self.message
+
 
 f = 'Photo_6554014_DJI_414_jpg_4766051_0_20219197385(1) Kopie.jpg'
 fp = '/Users/ferris/Downloads/Photo_6554014_DJI_414_jpg_4766051_0_20219197385(1) Kopie.jpg'
