@@ -234,13 +234,13 @@ class GpsClass:
 
         gps_dict: dict = {
             # Some version. Don't know differences between versions, but 2000 seems legit.
-            piexif.GPSIFD.GPSVersionID: (2, 0, 0, 0),
-            piexif.GPSIFD.GPSLatitudeRef: lat_ref,
-            piexif.GPSIFD.GPSLatitude: GpsClass._dd_to_rela3(self.lat),
-            piexif.GPSIFD.GPSLongitudeRef: lon_ref,
-            piexif.GPSIFD.GPSLongitude: GpsClass._dd_to_rela3(self.lon),
-            piexif.GPSIFD.GPSAltitudeRef: alt_ref,
-            piexif.GPSIFD.GPSAltitude: GpsClass._dd_to_rela(self.alt),
+            GPSIFD.GPSVersionID: (2, 0, 0, 0),
+            GPSIFD.GPSLatitudeRef: lat_ref,
+            GPSIFD.GPSLatitude: GpsClass._dd_to_rela3(self.lat),
+            GPSIFD.GPSLongitudeRef: lon_ref,
+            GPSIFD.GPSLongitude: GpsClass._dd_to_rela3(self.lon),
+            GPSIFD.GPSAltitudeRef: alt_ref,
+            GPSIFD.GPSAltitude: GpsClass._dd_to_rela(self.alt),
         }
         return gps_dict
 
